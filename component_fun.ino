@@ -11,12 +11,14 @@
 
 #define BOX_HEIGHT 58
 
-#define PELLET_NUM 2 //change to increase pellet number, sorta temporary
+#define PELLET_NUM 6 //change to increase pellet number, sorta temporary
 
 int adcval;
 bool soundPlaying;
 int score;
-int strikeCount;
+uint8_t strikeCount;
+int cycles;
+uint8_t pelletsOut;
 
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
 
@@ -94,8 +96,12 @@ const unsigned char splash [] PROGMEM = {
 };
 
 int pelletPos[PELLET_NUM][2] = {
-  {random(0,127),0},
-  {random(0,127),0}
+  {random(20,114),random(0,10)},
+  {random(20,114),random(0,10)},
+  {random(20,114),random(0,10)},
+  {random(20,114),random(0,10)},
+  {random(20,114),random(0,10)},
+  {random(20,114),random(0,10)}
   };
 
 void setup() {
@@ -112,7 +118,7 @@ void setup() {
   display.display();
   splashSong();
 
-  delay(5000);
+  delay(1000);
   
 
   display.setTextSize(1);      // Normal 1:1 pixel scale
@@ -129,6 +135,8 @@ void setup() {
   soundPlaying = false;
   score = 0;
   strikeCount = 0;
+  pelletsOut = 1;
+  cycles = 0;
 
   randomSeed(analogRead(A2)); //uses analog noise to get new seed
   
@@ -158,8 +166,22 @@ void loop() {
     display.drawBitmap(adcval,BOX_HEIGHT,box,10,5,SSD1306_WHITE);
   }
 
-  updatePellets(adcval);
+  if(cycles == 29) { //300 cycles have passed, 300*100 = 30000 / 1000 = 30s
+    if(pelletsOut != PELLET_NUM) {
+      pelletsOut++;
+    cycles = 0;
+    }
+  }
+  
+  updatePellets(adcval,pelletsOut);
+  
   drawStrikes();
+  
+  if(strikeCount == 4) {
+    gameOver();
+  }
+
+  cycles++;
 
   
 
@@ -179,52 +201,64 @@ void loop() {
 //    stopSound();
 //  }
   
-  delay(100);
+  delay(50);
 }
 
 //pelletPos[pellet][0] = X coordinate
 //pelletPos[pellet][1] = Y coordinate
-void updatePellets(int paddlePos) {
-  for(int pellet = 0; pellet < PELLET_NUM; pellet++) { //for each pellet
-    if(pelletPos[pellet][1] == BOX_HEIGHT) { //this is when the pellet would contact the box
+void updatePellets(int paddlePos, int pelletsOut) {
+  for(int pellet = 0; pellet < pelletsOut; pellet++) {//for each pellet
+    
+    if(pelletPos[pellet][1] >= BOX_HEIGHT || pelletPos[pellet][1] >= BOX_HEIGHT + 5) { //this is when the pellet would contact the box
+      
       if(pelletPos[pellet][0] >= paddlePos && pelletPos[pellet][0] < paddlePos + 10) { //if pellet x is greater than box's left hand side and less than box's right hand side, we made it in
         score++; //increase score
-        pelletPos[pellet][0] = random(0, 120); //reset x position somewhere new
-        pelletPos[pellet][1] = 0; //reset y to top
+        pelletPos[pellet][0] = random(20,114); //reset x position somewhere new
+        pelletPos[pellet][1] = random(0,10); //reset y to top
         display.drawPixel(pelletPos[pellet][0],pelletPos[pellet][1],SSD1306_WHITE); //draw new pellet position
+        sound(500, 100);
+        //delay(100*1.3);
 //        Serial.print(pelletPos[pellet][0]);
 //        Serial.print(",");
 //        Serial.println(pelletPos[pellet][1]);
       }
-    } else {
-        //TODO: Something is fucky in here, if you mouse over where pellet used to be, it still counts the score
-        //Also not respawning at the top if it's not caught
-        //maybe make a flowchart to make sure data is flowing properly?
+    } 
       
-      if(pelletPos[pellet][1] > 66) { //if we missed, add a strike
-        strikeCount++;
-        pelletPos[pellet][0] = random(0,120);
-        pelletPos[pellet][1] = 0;
+    if(pelletPos[pellet][1] > 68) { //if we missed, add a strike
+      strikeCount++;
+      pelletPos[pellet][0] = random(20,114);
+      pelletPos[pellet][1] = random(0,10);
+      sound(100, 100);
         
-      }
-      
-      pelletPos[pellet][1] += 2; //change this for faster drop
-      display.drawPixel(pelletPos[pellet][0],pelletPos[pellet][1],SSD1306_WHITE);
-
-      
-//      Serial.print(pelletPos[pellet][0]);
-//      Serial.print(",");
-//      Serial.println(pelletPos[pellet][1]);
-      
     }
+
+    //pellet will always be dropping
+    pelletPos[pellet][1] += 2; //change this for faster drop
+    display.drawPixel(pelletPos[pellet][0],pelletPos[pellet][1],SSD1306_WHITE);
   }
 }
 
 void drawStrikes() {
   display.setCursor(80, 0);
-  for(int i = 0; i <= strikeCount; i++) {
+  for(int i = 0; i < strikeCount; i++) {
     display.print("X ");
   }
+}
+
+void gameOver() {
+  display.clearDisplay();
+  
+  display.println("Game over!");
+  display.print("Final Score: ");
+  display.println(score);
+  display.println();
+  display.println("To restart, press RST on board");
+
+  display.display();
+
+  sound(100, 2000);
+
+  while(1);
 }
 
 void startupSong() {
